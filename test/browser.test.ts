@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
-import { chromium, type BrowserContext } from "playwright";
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from "node:fs";
+import { chromium, type BrowserContext, type Page } from "playwright";
+import { mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -17,15 +17,18 @@ test("Chrome popup, persistent policy, native host and native WebMCP when expose
   // artifacts keep optional permissions and require the user's UI grant.
   manifest.host_permissions = ["http://127.0.0.1/*"]; writeFileSync(join(extension, "manifest.json"), JSON.stringify(manifest));
   const fixture = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("<!doctype html><title>Bridge fixture</title><h1>Native WebMCP test</h1>", { headers: { "Content-Type": "text/html" } }) });
-  let browser: BrowserContext | undefined; const client = new Client({ name: "browser-test", version: "1" });
+  let browser: BrowserContext | undefined, ui: Page | undefined; const client = new Client({ name: "browser-test", version: "1" });
   const token = JSON.parse(readFileSync(join(data, "auth.json"), "utf8")).token;
   try {
     browser = await chromium.launchPersistentContext(join(home, "profile"), { channel: "chromium", headless: true, env, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, "--enable-blink-features=WebMCP"] });
     const worker = browser.serviceWorkers()[0] ?? await browser.waitForEvent("serviceworker");
+    console.log("Browser worker:", worker.url);
+    browser.on("weberror", error => console.error("BROWSER ERROR:", error.error().message));
     const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${fixture.port}`);
     const native = await page.evaluate(() => typeof (document as any).modelContext?.getTools === "function");
+    console.log("Native WebMCP available:", native);
     if (native) await page.evaluate(async () => { await (document as any).modelContext.registerTool({ name: "echo", description: "Echo text", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, execute: async ({ text }: any) => text }); });
-    const ui = await browser.newPage(); await ui.goto(`chrome-extension://${EXTENSION_ID}/popup.html`);
+    ui = await browser.newPage(); await ui.goto(`chrome-extension://${EXTENSION_ID}/popup.html`);
     await ui.getByText("Native host connected", { exact: true }).waitFor({ timeout: 15000 });
     await ui.getByLabel("Automatically install verified updates").uncheck();
     await ui.getByLabel("Allow agent to focus tabs").check();
@@ -44,5 +47,10 @@ test("Chrome popup, persistent policy, native host and native WebMCP when expose
       expect((await client.callTool({ name: "webmcp_call", arguments: { toolRef: ref, arguments: { text: "stale" } } })).isError).toBe(true);
       console.log("NATIVE_WEBMCP_E2E_PASSED");
     } else console.warn("NATIVE_WEBMCP_UNAVAILABLE: popup/native-host tests passed, but this Chromium does not expose the targeted WebMCP API. No native tool-call claim is made.");
+  } catch (error) {
+    if (ui) { console.error("POPUP DIAGNOSTICS:", await ui.locator("body").innerText().catch(() => "unavailable")); await ui.screenshot({ path: "artifacts/popup-failure.png" }).catch(() => {}); }
+    console.error("BROKER LOG:", existsSync(join(data, "broker.log")) ? readFileSync(join(data, "broker.log"), "utf8").slice(-6000) : "No broker was launched");
+    console.error("INSTALLATION:", install.stdout.toString());
+    throw error;
   } finally { await client.close().catch(() => {}); await browser?.close(); await fetch("http://127.0.0.1:8777/admin/stop", { method: "POST", headers: { Authorization: "Bearer " + token } }).catch(() => {}); fixture.stop(); await Bun.sleep(700); rmSync(home, { recursive: true, force: true }); }
 }, 60000);
