@@ -16,6 +16,7 @@ const boot = (async () => {
 })();
 const overrideKey = (p: Page) => `${p.tabId}:${p.origin}`;
 const exposed = (p: Page) => enabled(policy, overrides[overrideKey(p)], p.origin);
+const permitted = (p: Page) => chrome.permissions.contains({ origins: [p.origin + "/*"] }).catch(() => false);
 function send(m: any) { try { native?.postMessage(m); } catch { host.connected = false; } }
 function snapshot(d: Entry) { d.page.enabled = exposed(d.page); send({ type: "context", page: d.page }); }
 function project() {
@@ -70,7 +71,7 @@ async function fromHost(m: any) {
       for (const d of docs.values()) snapshot(d); result = { refreshed: true };
     } else {
       const d = docs.get(m.key);
-      if (!d || !exposed(d.page)) throw new BridgeError("context_disabled", "This context is no longer enabled.");
+      if (!d || !await permitted(d.page) || docs.get(m.key) !== d || !exposed(d.page)) throw new BridgeError("context_disabled", "This context is no longer enabled or permitted.");
       if (m.op === "focus") {
         if (!policy.allowFocus) throw new BridgeError("focus_disabled", "Enable Allow agent focus in the popup.");
         await focus(d.page.tabId); result = { focused: true };
@@ -81,7 +82,7 @@ async function fromHost(m: any) {
           const yes = await new Promise<boolean>(resolve => { const timer = setTimeout(() => decide(m.id, false), 55000); approvals.set(m.id, { key: m.key, tool: t.name, arguments: m.arguments, resolve, timer }); project(); });
           if (!yes) throw new BridgeError("approval_denied", "Popup approval denied, cancelled or expired.");
         }
-        if (docs.get(m.key) !== d || !exposed(d.page) || d.page.revision !== m.revision) throw new BridgeError("stale_context", "Context changed while awaiting approval.");
+        if (!await permitted(d.page) || docs.get(m.key) !== d || !exposed(d.page) || d.page.revision !== m.revision) throw new BridgeError("stale_context", "Context changed while awaiting approval.");
         host.activity = { key: m.key, tool: t.name }; project();
         result = await pageRequest(d, { op: "call", id: m.id, toolKey: m.toolKey, revision: m.revision, arguments: m.arguments }, 60000);
       } else throw new BridgeError("invalid_request", "Unknown bridge operation.");
@@ -101,8 +102,10 @@ chrome.runtime.onConnect.addListener(port => {
   const s = port.sender, url = s.url!, key = crypto.randomUUID();
   const page: Page = { key, documentId: s.documentId!, tabId: s.tab!.id!, frameId: s.frameId ?? 0, origin: new URL(url).origin, url: safeURL(url), title: s.tab!.title ?? "", active: s.tab!.active, enabled: false, revision: 0, tools: [] };
   const d: Entry = { page, port, status: "checking" }; docs.set(key, d);
+  const admission = permitted(page);
   port.onDisconnect.addListener(() => remove(key));
-  port.onMessage.addListener(m => { void boot.then(() => {
+  port.onMessage.addListener(m => { void Promise.all([boot, admission]).then(([, allowed]) => {
+    if (!allowed) { port.disconnect(); remove(key); return; }
     if (!docs.has(key)) return;
     if (m.type === "snapshot" && Array.isArray(m.tools) && m.tools.length <= 128 && Number.isInteger(m.revision)) {
       page.tools = m.tools; page.revision = m.revision; d.status = m.status; d.detail = m.detail; snapshot(d); project();

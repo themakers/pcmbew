@@ -3,6 +3,7 @@ import Ajv from "ajv";
 import Ajv2020 from "ajv/dist/2020.js";
 import { BridgeError, clean, safeURL, type Page, type Tool } from "./shared";
 type Entry = { channel: string; page: Page; contextRef: string; refs: Map<string, Tool>; touched: number };
+const reject = (reason: string): never => { console.error("Rejected WebMCP catalogue:", reason); throw new Error(reason); };
 export class Catalog {
   entries = new Map<string, Entry>();
   private validators = new Map<string, (args: unknown) => boolean>();
@@ -11,18 +12,18 @@ export class Catalog {
   private modern = new Ajv2020({ strict: false, validateFormats: false, ownProperties: true, addUsedSchema: false });
   upsert(channel: string, input: Page) {
     const p: Page = structuredClone(input);
-    if (!p || typeof p.key !== "string" || typeof p.documentId !== "string" || typeof p.title !== "string" || !Number.isInteger(p.tabId) || !Number.isInteger(p.frameId) || !Number.isInteger(p.revision) || typeof p.enabled !== "boolean" || !Array.isArray(p.tools) || p.tools.length > 128) throw new Error("Invalid context");
+    if (!p || typeof p.key !== "string" || typeof p.documentId !== "string" || typeof p.title !== "string" || !Number.isInteger(p.tabId) || !Number.isInteger(p.frameId) || !Number.isInteger(p.revision) || typeof p.enabled !== "boolean" || !Array.isArray(p.tools) || p.tools.length > 128) reject("Invalid context field types: " + JSON.stringify(Object.fromEntries(["key", "documentId", "title", "tabId", "frameId", "revision", "enabled", "tools"].map(k => [k, typeof (p as any)?.[k]]))));
     const u = new URL(p.url);
-    if (!["http:", "https:"].includes(u.protocol) || u.origin !== p.origin) throw new Error("Invalid origin");
+    if (!["http:", "https:"].includes(u.protocol) || u.origin !== p.origin) reject("Invalid origin");
     p.url = safeURL(p.url); p.title = clean(p.title);
     const keys = new Set();
     for (const t of p.tools) {
-      if (typeof t.key !== "string" || keys.has(t.key) || typeof t.name !== "string" || typeof t.description !== "string" || !t.inputSchema || Array.isArray(t.inputSchema) || typeof t.inputSchema !== "object") throw new Error("Invalid tool");
+      if (typeof t.key !== "string" || keys.has(t.key) || typeof t.name !== "string" || typeof t.description !== "string" || !t.inputSchema || Array.isArray(t.inputSchema) || typeof t.inputSchema !== "object") reject("Invalid tool field types: " + JSON.stringify({ key: typeof t.key, duplicateKey: keys.has(t.key), name: typeof t.name, description: typeof t.description, inputSchema: typeof t.inputSchema }));
       keys.add(t.key);
     }
     const key = channel + ":" + p.key, old = this.entries.get(key);
     const changed = !old || old.page.documentId !== p.documentId || old.page.origin !== p.origin || old.page.revision !== p.revision || old.page.enabled !== p.enabled || JSON.stringify(old.page.tools) !== JSON.stringify(p.tools);
-    if (!old && this.entries.size >= 256) throw new Error("Context limit exceeded");
+    if (!old && this.entries.size >= 256) reject("Context limit exceeded");
     if (changed) {
       if (old) for (const r of old.refs.keys()) this.validators.delete(r);
       this.entries.set(key, { channel, page: p, touched: Date.now(), contextRef: "ctx_" + randomUUID(), refs: new Map(p.tools.map(t => ["tool_" + randomUUID(), t])) });

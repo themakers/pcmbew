@@ -21,7 +21,7 @@ export async function broker() {
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; server: Server }>();
   const validator = new Ajv({ strict: false });
   const schemas = new Map(TOOLS.map(t => [t.name, validator.compile<Dict>(t.inputSchema)]));
-  let updating = false, updateMessage = "", lastUse = Date.now(), refreshAt = 0;
+  let updating = false, restarting = false, updateMessage = "", lastUse = Date.now(), refreshAt = 0;
   let refreshPending: Promise<void> | undefined;
   const status = () => ({ version: VERSION, connectedProfiles: [...channels.values()].filter(c => c.ready).length, enabledContexts: catalog.contexts().length, message: updateMessage });
   const broadcast = (m: any) => { for (const c of channels.values()) if (c.ready) { try { send(c.socket, m); } catch { c.socket.destroy(); } } };
@@ -54,15 +54,16 @@ export async function broker() {
     if (updating) throw new BridgeError("updating", "Bridge is updating; rediscover after reconnecting.");
     const found = name === "webmcp_call" ? catalog.tool(args.toolRef) : undefined;
     const e = found?.entry ?? catalog.context(args.contextRef);
-    if (busy.has(e.contextRef)) throw new BridgeError("context_busy", "Another call is running in this document; no request was queued.");
+    const executionKey = e.channel + ":" + e.page.key;
+    if (busy.has(executionKey)) throw new BridgeError("context_busy", "Another call is running in this document; no request was queued.");
     if (busy.size >= 8) throw new BridgeError("busy", "Concurrent call limit reached; no request was queued.");
     if (name === "webmcp_focus" && !channels.get(e.channel)?.allowFocus) throw new BridgeError("focus_disabled", "Allow agent focus is disabled in the extension.");
     if (found) catalog.validate(args.toolRef, args.arguments);
-    busy.add(e.contextRef);
+    busy.add(executionKey);
     try {
       const result = await rpc(e.channel, { op: found ? "call" : "focus", key: e.page.key, revision: e.page.revision, toolKey: found?.tool.key, arguments: args.arguments }, signal);
       return { ...result, context: catalog.summary(e) };
-    } finally { busy.delete(e.contextRef); }
+    } finally { busy.delete(executionKey); }
   }
   function mcpServer() {
     const server = new Server({ name: "webmcp-bridge-ext", version: VERSION }, { capabilities: { tools: {} } });
@@ -86,9 +87,9 @@ export async function broker() {
       if (!newer(version, old)) { updateMessage = "Up to date."; return; }
       updateMessage = "Verifying update " + version + "..."; broadcast({ type: "status", status: status() });
       await install(version, undefined, installInfo()?.browser ?? "chrome");
-      ipc.close(); broadcast({ type: "reload" }); setTimeout(shutdown, 800);
+      restarting = true; ipc.close(); broadcast({ type: "reload" }); setTimeout(shutdown, 800);
     } catch (e) { updateMessage = "Update refused: " + (e as Error).message; }
-    finally { updating = false; broadcast({ type: "status", status: status() }); }
+    finally { updating = restarting; broadcast({ type: "status", status: status() }); }
   }
   const ipc = createIPC(socket => {
     const id = randomUUID(), channel: Channel = { socket, ready: false, allowFocus: false, autoUpdate: false }; channels.set(id, channel);
