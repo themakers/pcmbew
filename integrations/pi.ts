@@ -12,14 +12,23 @@ export default function(pi: { registerTool(tool: any): void; on(event: "session_
     if (!opening) opening = (async () => {
       const probe = await connectBroker(); probe.destroy();
       const c = new Client({ name: "webmcp-bridge-ext-pi", version: VERSION });
-      await c.connect(new StreamableHTTPClientTransport(new URL("http://127.0.0.1:8777/mcp"), { requestInit: { headers: { Authorization: "Bearer " + credential() } } }));
+      try { await c.connect(new StreamableHTTPClientTransport(new URL("http://127.0.0.1:8777/mcp"), { requestInit: { headers: { Authorization: "Bearer " + credential() } } })); }
+      catch (e) { await c.close().catch(() => {}); throw e; }
       c.onclose = () => { if (client === c) client = undefined; }; client = c; return c;
     })().finally(() => { opening = undefined; });
     return opening;
   }
   for (const tool of TOOLS) pi.registerTool({ name: tool.name, label: tool.name.replaceAll("_", " "), description: tool.description, parameters: Type.Unsafe(tool.inputSchema), async execute(_id: string, args: Record<string, unknown>, signal?: AbortSignal) {
-    const result = await (await connected()).callTool({ name: tool.name, arguments: args }, undefined, { signal, timeout: 130000 });
-    return { content: [{ type: "text", text: JSON.stringify(result) }], details: {} };
+    let c: Client | undefined;
+    try {
+      c = await connected();
+      const result = await c.callTool({ name: tool.name, arguments: args }, undefined, { signal, timeout: 130000 });
+      return { content: [{ type: "text", text: JSON.stringify(result) }], details: {} };
+    } catch (e) {
+      if (client === c) client = undefined;
+      await c?.close().catch(() => {});
+      throw e; // A later user-directed invocation reconnects; this one is never replayed.
+    }
   } });
   pi.on("session_shutdown", async () => { await client?.close(); });
 }

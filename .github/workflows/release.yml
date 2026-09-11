@@ -39,6 +39,13 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "WebMCP Bridge $GITHUB_REF_NAME" --notes "Native WebMCP extension and host. Read README/SKILL.md for agent-led setup. Five stable MCP tools on localhost:8777."
           gh release upload "$GITHUB_REF_NAME" artifacts/runtime.zip artifacts/extension.zip artifacts/skill.zip artifacts/*.tgz artifacts/release.json artifacts/release.sigstore.json
           gh release edit "$GITHUB_REF_NAME" --draft=false
+      - name: Verify installation from the public signed release
+        env:
+          WEBMCP_HOME: ${{ runner.temp }}/public-release-install
+        run: |
+          node dist/cli.js install --browser chromium --user-data-dir "$RUNNER_TEMP/public-release-chrome"
+          node dist/cli.js config
+          node dist/cli.js doctor
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -47,6 +54,7 @@ jobs:
             artifacts/*.png
             artifacts/*.tgz
             artifacts/release*.json
+            artifacts/skill.zip
   npm:
     needs: release
     runs-on: ubuntu-latest

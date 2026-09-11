@@ -37,6 +37,8 @@ Read only the reference needed for the task:
   permissions, updates, constraints and developer checks.
 - [Recovery](references/troubleshooting.md): installation, native host,
   browser compatibility, stale tools and uncertain results.
+- [Compatibility](references/compatibility.md): native API revisions and custom
+  Chrome user-data directories.
 
 ## 1. Establish the environment
 
@@ -73,7 +75,10 @@ Node alternative:
 npx --yes @themakers/webmcp-bridge-ext@1.0.0 install
 ```
 
-For Chromium instead of Google Chrome, append `--browser chromium`.
+For Chromium instead of Google Chrome, append `--browser chromium`. For a
+non-default Chrome user-data root on macOS/Linux, also pass
+`--user-data-dir /absolute/browser-data-root`; do not point it at the `Default`
+or `Profile 1` child directory. The agent determines the correct local path.
 The installer verifies the release's Sigstore identity and artifact checksum,
 extracts it into a versioned private directory, registers the native host and
 prints JSON containing the extension directory. Keep the actual returned path;

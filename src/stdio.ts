@@ -15,7 +15,8 @@ export async function stdio() {
     if (!opening) opening = (async () => {
       const probe = await connectBroker(); probe.destroy();
       const c = new Client({ name: "webmcp-bridge-ext-stdio", version: VERSION });
-      await c.connect(new StreamableHTTPClientTransport(new URL("http://127.0.0.1:8777/mcp"), { requestInit: { headers: { Authorization: "Bearer " + credential() } } }));
+      try { await c.connect(new StreamableHTTPClientTransport(new URL("http://127.0.0.1:8777/mcp"), { requestInit: { headers: { Authorization: "Bearer " + credential() } } })); }
+      catch (e) { await c.close().catch(() => {}); throw e; }
       c.onclose = () => { if (client === c) client = undefined; };
       client = c; return c;
     })().finally(() => { opening = undefined; });
@@ -24,8 +25,14 @@ export async function stdio() {
   const server = new Server({ name: "webmcp-bridge-ext", version: VERSION }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (r, extra) => {
-    try { return await (await connected()).callTool(r.params, undefined, { signal: extra.signal, timeout: 130000 }) as any; }
-    catch (e) { return { isError: true, content: [{ type: "text", text: JSON.stringify(failure(e)) }] }; }
+    let c: Client | undefined;
+    try { c = await connected(); return await c.callTool(r.params, undefined, { signal: extra.signal, timeout: 130000 }) as any; }
+    catch (e) {
+      // Discard a broken HTTP session, but never replay this invocation.
+      if (client === c) client = undefined;
+      await c?.close().catch(() => {});
+      return { isError: true, content: [{ type: "text", text: JSON.stringify(failure(e)) }] };
+    }
   });
   server.onclose = () => { void client?.close(); };
   await server.connect(new StdioServerTransport());
