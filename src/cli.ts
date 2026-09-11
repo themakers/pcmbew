@@ -1,76 +1,36 @@
 #!/usr/bin/env node
-import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
-import type { IncomingMessage } from "node:http";
-import { WebSocket, WebSocketServer } from "ws";
-
-const die = (error: unknown): never => {
-  console.error("pcmbew:", error instanceof Error ? error.message : error);
-  process.exit(1);
-};
-
-const { values } = parseArgs({ options: {
-  port: { type: "string" }, origin: { type: "string" }, help: { type: "boolean" },
-} });
-
-if (values.help) {
-  console.error("pcmbew --port <1..65535> [--origin https://your-spa.example]");
-  process.exit(0);
-}
-
-const port = Number(values.port);
-if (!Number.isInteger(port) || port < 1 || port > 65535) die("--port must be 1..65535");
-let origin = values.origin;
-if (origin && (!/^https?:\/\//.test(origin) || new URL(origin).origin !== origin)) {
-  die("--origin must be an HTTP(S) origin, without a path or trailing slash");
-}
-
-let browser: WebSocket | undefined;
-const pending: string[] = [];
-const limit = 8 * 1024 * 1024;
-let pendingBytes = 0;
-
-const server = new WebSocketServer({
-  host: "127.0.0.1", port, maxPayload: limit, perMessageDeflate: false,
-  verifyClient: ({ origin: incoming, req }: { origin: string; req: IncomingMessage }) =>
-    req.headers.host === `127.0.0.1:${port}` &&
-    /^https?:\/\//.test(incoming) && (!origin || origin === incoming) && !browser,
-});
-
-server.on("error", die);
-server.on("listening", () => console.error(`pcmbew: ws://127.0.0.1:${port}`));
-
-const send = (socket: WebSocket, line: string) => {
-  if (socket.bufferedAmount + Buffer.byteLength(line) > limit) die("browser is too slow");
-  socket.send(line, error => { if (error) socket.terminate(); });
-};
-
-server.on("connection", (socket, request) => {
-  browser = socket;
-  origin ??= request.headers.origin;
-  socket.on("error", () => socket.terminate());
-  socket.on("close", () => { if (browser === socket) browser = undefined; });
-  socket.on("message", (data, binary) => {
-    if (browser !== socket) return;
-    const line = data.toString();
-    if (binary || /[\r\n]/.test(line)) { socket.close(1003, "One text line per frame"); return; }
-    if (!process.stdout.write(line + "\n")) {
-      socket.pause();
-      process.stdout.once("drain", () => socket.resume());
-    }
-  });
-  for (const line of pending) send(socket, line);
-  pending.length = pendingBytes = 0;
-});
-
-const input = createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false });
-input.on("line", line => {
-  if (browser?.readyState === WebSocket.OPEN) send(browser, line);
-  else {
-    pendingBytes += Buffer.byteLength(line) + 1;
-    if (pendingBytes > limit) die("offline input buffer exceeded 8 MiB");
-    pending.push(line);
+import { join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { VERSION, PORT, EXTENSION_ID } from "./shared";
+import { HOME, credential } from "./local";
+import { install, current, installedCLI, installInfo } from "./installer";
+import { broker } from "./broker";
+import { native } from "./connector";
+import { stdio } from "./stdio";
+async function main() {
+  const [command, ...rest] = process.argv.slice(2);
+  if (command === "native") { await native(rest[0]); return; }
+  if (command === "broker") { await broker(); return; }
+  if (command === "stdio") { await stdio(); return; }
+  if (command === "install") {
+    const { values } = parseArgs({ args: rest, options: { browser: { type: "string", default: "chrome" }, "local-archive": { type: "string" } } });
+    console.log(JSON.stringify(await install(VERSION, values["local-archive"], values.browser), null, 2)); return;
   }
-});
-input.on("close", () => process.exit(0));
-process.stdout.on("error", die);
+  if (command === "config") {
+    console.log(JSON.stringify({ mcpServers: { "webmcp-bridge-ext": { command: process.execPath, args: [join(HOME, "runner.cjs"), "stdio"], env: { WEBMCP_HOME: HOME } } } }, null, 2)); return;
+  }
+  if (command === "doctor") {
+    let health: any = { connected: false };
+    try { const r = await fetch(`http://127.0.0.1:${PORT}/health`, { headers: { Authorization: "Bearer " + credential() }, signal: AbortSignal.timeout(2000) }); health = { status: r.status, ...(await r.json() as object) }; } catch {}
+    console.log(JSON.stringify({ cliVersion: VERSION, installed: current() ?? null, nativeHost: installInfo() ?? null, extensionId: EXTENSION_ID, extensionDirectory: join(HOME, "extension"), credentialsPresent: existsSync(join(HOME, "auth.json")), endpoint: `http://127.0.0.1:${PORT}/mcp`, health }, null, 2)); return;
+  }
+  if (command === "update" || command === "stop") {
+    const r = await fetch(`http://127.0.0.1:${PORT}/admin/${command}`, { method: "POST", headers: { Authorization: "Bearer " + credential() }, signal: AbortSignal.timeout(3000) });
+    if (!r.ok) throw new Error("Host control failed: " + r.status); console.log(command + " requested"); return;
+  }
+  if (command === "--version") { console.log(VERSION); return; }
+  if (!command || command === "--help") { console.log("webmcp-bridge-ext install [--browser chrome|chromium]\nwebmcp-bridge-ext config | doctor | stdio | update | stop\nInstall writes a per-user native host and prints the extension folder. Load that folder once using Chrome's extension manager. No website library is needed."); return; }
+  throw new Error("Unknown command. Use --help.");
+}
+main().catch(e => { console.error("webmcp-bridge-ext:", (e as Error).message); process.exit(1); });

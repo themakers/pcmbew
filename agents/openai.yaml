@@ -1,4 +1,4 @@
 interface:
-  display_name: "pcmbew Website Connection"
-  short_description: "Connect a local agent to a signed-in website"
-  default_prompt: "Use $pcmbew to configure my harness and guide me through connecting my signed-in website. Verify a safe tool call before making changes."
+  display_name: "WebMCP Bridge"
+  short_description: "Connect approved browser tabs to your local agent"
+  default_prompt: "Use $webmcp-bridge-ext to install the native host, configure my local harness and guide me through the extension UI. Verify a harmless tool call before making changes."

@@ -1,0 +1,10 @@
+import { mkdirSync, copyFileSync, chmodSync } from "node:fs";
+mkdirSync("dist/extension", { recursive: true });
+const cli = await Bun.build({ entrypoints: ["src/cli.ts", "integrations/pi.ts"], target: "node", format: "esm", packages: "external", outdir: "dist", naming: "[name].js" });
+if (!cli.success) throw new AggregateError(cli.logs, "CLI build failed");
+const content = await Bun.build({ entrypoints: ["extension/content.ts"], target: "browser", format: "iife", outdir: "dist/extension" });
+if (!content.success) throw new AggregateError(content.logs, "Content build failed");
+const ui = await Bun.build({ entrypoints: ["extension/worker.ts", "extension/ui.ts"], target: "browser", format: "esm", outdir: "dist/extension" });
+if (!ui.success) throw new AggregateError(ui.logs, "Extension build failed");
+for (const name of ["manifest.json", "popup.html", "options.html", "ui.css"]) copyFileSync("extension/" + name, "dist/extension/" + name);
+chmodSync("dist/cli.js", 0o755);

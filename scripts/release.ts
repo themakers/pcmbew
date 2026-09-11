@@ -1,0 +1,16 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { sign, verify } from "sigstore";
+import { VERSION, WIRE, REPO } from "../src/shared";
+if (process.env.GITHUB_REF !== `refs/tags/v${VERSION}`) throw new Error("Release workflow must run on its version tag");
+const artifact = (name: string) => { const b = readFileSync("artifacts/" + name); return { name, size: b.length, sha256: createHash("sha256").update(b).digest("hex") }; };
+const manifest = Buffer.from(JSON.stringify({ version: VERSION, wire: WIRE, runtime: artifact("runtime.zip"), extension: artifact("extension.zip"), skill: artifact("skill.zip") }, null, 2) + "\n");
+const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL, token = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+if (!url || !token) throw new Error("GitHub Actions OIDC permissions are missing");
+const response = await fetch(url + "&audience=sigstore", { headers: { Authorization: "Bearer " + token } });
+if (!response.ok) throw new Error("Could not obtain workflow signing identity");
+const identityToken = ((await response.json()) as any).value;
+const bundle = await sign(manifest, { identityToken });
+await verify(bundle, manifest, { certificateIssuer: "https://token.actions.githubusercontent.com", certificateIdentityURI: `https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/v${VERSION}` });
+writeFileSync("artifacts/release.json", manifest); writeFileSync("artifacts/release.sigstore.json", JSON.stringify(bundle));
+console.log("Signed and verified release " + VERSION);
