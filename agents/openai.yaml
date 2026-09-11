@@ -1,0 +1,4 @@
+interface:
+  display_name: "pcmbew Website Connection"
+  short_description: "Connect a local agent to a signed-in website"
+  default_prompt: "Use $pcmbew to configure my harness and guide me through connecting my signed-in website. Verify a safe tool call before making changes."

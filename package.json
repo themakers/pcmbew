@@ -8,14 +8,15 @@
   "bin": { "pcmbew": "./dist/cli.cjs" },
   "exports": { ".": { "types": "./dist/client.d.ts", "import": "./dist/client.js", "default": "./dist/client.js" } },
   "types": "./dist/client.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "SKILL.md", "references", "agents", "examples/pi/index.ts", "examples/pi/package.json", "examples/pi/tsconfig.json", "LICENSE"],
   "sideEffects": false,
   "engines": { "node": ">=20" },
   "packageManager": "bun@1.3.0",
   "publishConfig": { "registry": "https://npm.pkg.github.com", "access": "public" },
   "scripts": {
     "build": "bun build src/cli.ts --target=node --format=cjs --packages=external --outfile=dist/cli.cjs && bun build src/client.ts --target=browser --packages=external --outfile=dist/client.js && bun x --bun tsc --emitDeclarationOnly",
-    "check": "bun x --bun tsc --noEmit",
+    "check": "bun run docs:check && bun x --bun tsc --noEmit",
+    "docs:check": "bun scripts/check-docs.mjs",
     "prepack": "bun run build"
   },
   "dependencies": {
