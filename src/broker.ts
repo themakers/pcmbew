@@ -20,7 +20,7 @@ export async function broker() {
   const busy = new Set<string>();
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; server: Server }>();
   const validator = new Ajv({ strict: false });
-  const schemas = new Map(TOOLS.map(t => [t.name, validator.compile(t.inputSchema)]));
+  const schemas = new Map(TOOLS.map(t => [t.name, validator.compile<Dict>(t.inputSchema)]));
   let updating = false, updateMessage = "", lastUse = Date.now(), refreshAt = 0;
   let refreshPending: Promise<void> | undefined;
   const status = () => ({ version: VERSION, connectedProfiles: [...channels.values()].filter(c => c.ready).length, enabledContexts: catalog.contexts().length, message: updateMessage });

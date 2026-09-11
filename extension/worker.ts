@@ -8,11 +8,11 @@ const docs = new Map<string, Entry>(), ui = new Set<chrome.runtime.Port>();
 const pending = new Map<string, { key: string; resolve(v: any): void; reject(e: any): void; timer: ReturnType<typeof setTimeout> }>();
 const approvals = new Map<string, { key: string; tool: string; arguments: any; resolve(v: boolean): void; timer: ReturnType<typeof setTimeout> }>();
 const boot = (async () => {
-  const data = await chrome.storage.local.get(["policy", "profile"]);
+  const data = await chrome.storage.local.get(["policy", "profile"]) as { policy?: Partial<Policy>; profile?: string };
   policy = { ...DEFAULT_POLICY, ...data.policy, sites: { ...(data.policy?.sites ?? {}) } };
   profile = data.profile || crypto.randomUUID();
   if (!data.profile) await chrome.storage.local.set({ profile });
-  overrides = (await chrome.storage.session.get("overrides")).overrides ?? {};
+  overrides = ((await chrome.storage.session.get("overrides")).overrides ?? {}) as typeof overrides;
 })();
 const overrideKey = (p: Page) => `${p.tabId}:${p.origin}`;
 const exposed = (p: Page) => enabled(policy, overrides[overrideKey(p)], p.origin);
@@ -55,7 +55,7 @@ function pageRequest(d: Entry, m: any, timeout: number) {
     try { d.port.postMessage(m); } catch { cancel(m.id); }
   });
 }
-async function focus(tabId: number) { const t = await chrome.tabs.update(tabId, { active: true }); if (t.windowId !== undefined) await chrome.windows.update(t.windowId, { focused: true }); }
+async function focus(tabId: number) { const t = await chrome.tabs.update(tabId, { active: true }); if (!t) throw new BridgeError("stale_context", "Tab closed before focus."); if (t.windowId !== undefined) await chrome.windows.update(t.windowId, { focused: true }); }
 async function fromHost(m: any) {
   await boot;
   if (m.type === "welcome") { host = { connected: true, ...m.status }; for (const d of docs.values()) snapshot(d); project(); return; }
