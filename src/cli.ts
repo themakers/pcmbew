@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
+import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
 const die = (error: unknown): never => {
@@ -31,7 +32,7 @@ let pendingBytes = 0;
 
 const server = new WebSocketServer({
   host: "127.0.0.1", port, maxPayload: limit, perMessageDeflate: false,
-  verifyClient: ({ origin: incoming, req }) =>
+  verifyClient: ({ origin: incoming, req }: { origin: string; req: IncomingMessage }) =>
     req.headers.host === `127.0.0.1:${port}` &&
     /^https?:\/\//.test(incoming) && (!origin || origin === incoming) && !browser,
 });
