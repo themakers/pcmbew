@@ -41,24 +41,25 @@ export function extract(archive: Uint8Array, destination: string) {
   } });
   for (const [name, data] of Object.entries(files)) { const path = join(destination, name); if (name.endsWith("/")) mkdirSync(path, { recursive: true }); else { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, data); } }
 }
-export function nativeManifestPath(browser = "chrome") {
+export function nativeManifestPath(browser = "chrome", userDataDir?: string) {
   if (!["chrome", "chromium"].includes(browser)) throw new Error("Supported browsers: chrome, chromium");
   if (process.platform === "win32") return join(HOME, HOST + ".json");
-  const base = process.platform === "darwin" ? join(homedir(), "Library", "Application Support", browser === "chrome" ? "Google/Chrome" : "Chromium") : join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), browser === "chrome" ? "google-chrome" : "chromium");
+  if (userDataDir) return join(resolve(userDataDir), "NativeMessagingHosts", HOST + ".json");
+  const base = process.platform === "darwin" ? join(homedir(), "Library", "Application Support", browser === "chrome" ? "Google/Chrome" : "Chromium") : join(process.env.CHROME_CONFIG_HOME || process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), browser === "chrome" ? "google-chrome" : "chromium");
   return join(base, "NativeMessagingHosts", HOST + ".json");
 }
-function register(browser: string) {
+function register(browser: string, userDataDir?: string) {
   const runtime = process.execPath, launch = join(HOME, "runner.cjs"), executable = join(HOME, process.platform === "win32" ? "native-host.cmd" : "native-host.sh");
   if (/[\r\n"]/.test(runtime + HOME) || (process.platform === "win32" && /[%!]/.test(runtime + HOME))) throw new Error("Unsupported characters in installation path");
   writeFileSync(launch, `const fs=require('fs'),p=require('path'),cp=require('child_process');\nconst home=${JSON.stringify(HOME)};\nconst v=JSON.parse(fs.readFileSync(p.join(home,'current.json'),'utf8')).version;\nif(!/^\\d+\\.\\d+\\.\\d+$/.test(v))throw Error('Invalid installed version');\nconst c=cp.spawn(${JSON.stringify(runtime)},[p.join(home,'versions',v,'dist','cli.js'),...process.argv.slice(2)],{stdio:'inherit',env:{...process.env,WEBMCP_HOME:home}});\nc.on('error',e=>{console.error(e.message);process.exit(1)});c.on('exit',code=>process.exit(code??1));\n`);
   const sh = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
   writeFileSync(executable, process.platform === "win32" ? `@echo off\r\n"${runtime}" "${launch}" native %*\r\n` : `#!/bin/sh\nexec ${sh(runtime)} ${sh(launch)} native "$@"\n`, { mode: 0o700 });
-  const path = nativeManifestPath(browser); mkdirSync(dirname(path), { recursive: true });
+  const path = nativeManifestPath(browser, userDataDir); mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify({ name: HOST, description: "WebMCP Bridge native connector", path: executable, type: "stdio", allowed_origins: [`chrome-extension://${EXTENSION_ID}/`] }, null, 2));
   if (process.platform === "win32") execFileSync("reg", ["add", `HKCU\\Software\\${browser === "chrome" ? "Google\\Chrome" : "Chromium"}\\NativeMessagingHosts\\${HOST}`, "/ve", "/t", "REG_SZ", "/d", path, "/f"], { stdio: "ignore" });
-  writeFileSync(join(HOME, "installation.json"), JSON.stringify({ browser, runtime, manifest: path }));
+  writeFileSync(join(HOME, "installation.json"), JSON.stringify({ browser, runtime, manifest: path, userDataDir: userDataDir ? resolve(userDataDir) : undefined }));
 }
-export async function install(version = VERSION, localArchive?: string, browser = "chrome") {
+export async function install(version = VERSION, localArchive?: string, browser = "chrome", userDataDir: string | undefined = installInfo()?.userDataDir) {
   if (!validVersion(version)) throw new Error("Invalid version");
   credential(true);
   const lock = join(HOME, "install.lock");
@@ -80,8 +81,8 @@ export async function install(version = VERSION, localArchive?: string, browser 
     if (existsSync(extension)) renameSync(extension, backup);
     try { renameSync(extensionStage, extension); writeFileSync(join(HOME, "current.next"), JSON.stringify({ version, previous: old?.version === version ? old.previous : old?.version })); renameSync(join(HOME, "current.next"), join(HOME, "current.json")); }
     catch (e) { rmSync(extension, { recursive: true, force: true }); if (existsSync(backup)) renameSync(backup, extension); throw e; }
-    register(browser);
-    return { version, extensionDirectory: extension, nativeManifest: nativeManifestPath(browser), endpoint: "http://127.0.0.1:8777/mcp", extensionId: EXTENSION_ID, restartRequired: true };
+    register(browser, userDataDir);
+    return { version, extensionDirectory: extension, nativeManifest: nativeManifestPath(browser, userDataDir), endpoint: "http://127.0.0.1:8777/mcp", extensionId: EXTENSION_ID, restartRequired: true };
   } finally { rmSync(stage, { recursive: true, force: true }); rmSync(extensionStage, { recursive: true, force: true }); rmSync(lock, { force: true }); }
 }
 export function installedCLI() { const c = current(); if (!c) throw new Error("Run install first"); return join(HOME, "versions", c.version, "dist", "cli.js"); }

@@ -7,9 +7,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { EXTENSION_ID } from "../src/shared";
 test("Chrome popup, persistent policy, native host and native WebMCP when exposed", async () => {
-  const home = mkdtempSync(join(tmpdir(), "webmcp-browser-")), data = join(home, "bridge");
+  const home = mkdtempSync(join(tmpdir(), "webmcp-browser-")), data = join(home, "bridge"), userDataDir = join(home, "profile");
   const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), WEBMCP_HOME: data };
-  const install = Bun.spawnSync([process.execPath, resolve("dist/cli.js"), "install", "--browser", "chromium", "--local-archive", resolve("artifacts/runtime.zip")], { env, stdout: "pipe", stderr: "pipe" });
+  const install = Bun.spawnSync([process.execPath, resolve("dist/cli.js"), "install", "--browser", "chromium", "--user-data-dir", userDataDir, "--local-archive", resolve("artifacts/runtime.zip")], { env, stdout: "pipe", stderr: "pipe" });
   if (install.exitCode) throw new Error(install.stderr.toString());
   const extension = join(home, "test-extension"); cpSync(join(data, "extension"), extension, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(extension, "manifest.json"), "utf8"));
@@ -20,9 +20,9 @@ test("Chrome popup, persistent policy, native host and native WebMCP when expose
   let browser: BrowserContext | undefined, ui: Page | undefined; const client = new Client({ name: "browser-test", version: "1" });
   const token = JSON.parse(readFileSync(join(data, "auth.json"), "utf8")).token;
   try {
-    browser = await chromium.launchPersistentContext(join(home, "profile"), { channel: "chromium", headless: true, env, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, "--enable-blink-features=WebMCP"] });
+    browser = await chromium.launchPersistentContext(userDataDir, { channel: "chromium", headless: true, env, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, "--enable-blink-features=WebMCP"] });
     const worker = browser.serviceWorkers()[0] ?? await browser.waitForEvent("serviceworker");
-    console.log("Browser worker:", worker.url);
+    console.log("Browser worker:", worker.url());
     browser.on("weberror", error => console.error("BROWSER ERROR:", error.error().message));
     const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${fixture.port}`);
     const native = await page.evaluate(() => typeof (document as any).modelContext?.getTools === "function");

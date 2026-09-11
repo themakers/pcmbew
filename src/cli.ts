@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
 import { join } from "node:path";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { VERSION, PORT, EXTENSION_ID } from "./shared";
 import { HOME, credential } from "./local";
-import { install, current, installedCLI, installInfo } from "./installer";
+import { install, current, installInfo } from "./installer";
 import { broker } from "./broker";
 import { native } from "./connector";
 import { stdio } from "./stdio";
@@ -14,8 +14,8 @@ async function main() {
   if (command === "broker") { await broker(); return; }
   if (command === "stdio") { await stdio(); return; }
   if (command === "install") {
-    const { values } = parseArgs({ args: rest, options: { browser: { type: "string", default: "chrome" }, "local-archive": { type: "string" } } });
-    console.log(JSON.stringify(await install(VERSION, values["local-archive"], values.browser), null, 2)); return;
+    const { values } = parseArgs({ args: rest, options: { browser: { type: "string", default: "chrome" }, "local-archive": { type: "string" }, "user-data-dir": { type: "string" } } });
+    console.log(JSON.stringify(await install(VERSION, values["local-archive"], values.browser, values["user-data-dir"]), null, 2)); return;
   }
   if (command === "config") {
     console.log(JSON.stringify({ mcpServers: { "webmcp-bridge-ext": { command: process.execPath, args: [join(HOME, "runner.cjs"), "stdio"], env: { WEBMCP_HOME: HOME } } } }, null, 2)); return;
@@ -30,7 +30,7 @@ async function main() {
     if (!r.ok) throw new Error("Host control failed: " + r.status); console.log(command + " requested"); return;
   }
   if (command === "--version") { console.log(VERSION); return; }
-  if (!command || command === "--help") { console.log("webmcp-bridge-ext install [--browser chrome|chromium]\nwebmcp-bridge-ext config | doctor | stdio | update | stop\nInstall writes a per-user native host and prints the extension folder. Load that folder once using Chrome's extension manager. No website library is needed."); return; }
+  if (!command || command === "--help") { console.log("webmcp-bridge-ext install [--browser chrome|chromium] [--user-data-dir <absolute-browser-data-dir>]\nwebmcp-bridge-ext config | doctor | stdio | update | stop\nInstall writes a per-user native host and prints the extension folder. Load that folder once using Chrome's extension manager. No website library is needed."); return; }
   throw new Error("Unknown command. Use --help.");
 }
 main().catch(e => { console.error("webmcp-bridge-ext:", (e as Error).message); process.exit(1); });
