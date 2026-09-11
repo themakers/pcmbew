@@ -1,5 +1,5 @@
-import { VERSION, MAX_RESULT, type Tool } from "../src/shared";
-type NativeTool = { name: string; description: string; title?: string; inputSchema?: object; annotations?: object; window: Window; origin: string };
+import { VERSION, MAX_RESULT } from "../src/shared";
+type NativeTool = { name: string; description: string; title?: string; inputSchema?: object | string; annotations?: object; window: Window; origin: string };
 type ModelContext = EventTarget & { getTools(): Promise<NativeTool[]>; executeTool(tool: NativeTool, args: unknown, options?: { signal: AbortSignal }): Promise<string | null> };
 // Runs in Chrome's isolated world. No eval, MAIN-world injection, cookie access,
 // DOM scraping, or page postMessage command channel.
@@ -12,7 +12,13 @@ let serial = Promise.resolve();
 let registry = new Map<string, NativeTool>();
 const calls = new Map<string, AbortController>();
 const emit = (m: any) => { try { port?.postMessage(m); } catch { /* reconnect below */ } };
-const descriptor = (t: NativeTool) => ({ name: t.name, description: t.description, title: t.title, inputSchema: t.inputSchema ?? { type: "object", properties: {} }, annotations: t.annotations });
+function descriptor(t: NativeTool) {
+  // Chrome 153 serializes schemas and execution arguments as JSON strings;
+  // the later native API uses objects. Never retry a call to probe the API.
+  const schema = typeof t.inputSchema === "string" ? JSON.parse(t.inputSchema) : t.inputSchema ?? { type: "object", properties: {} };
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) throw new Error("Invalid native tool input schema.");
+  return { name: t.name, description: t.description, title: t.title, inputSchema: schema, annotations: t.annotations };
+}
 const own = (items: NativeTool[]) => items.filter(t => t.window === window && t.origin === location.origin).sort((a, b) => a.name.localeCompare(b.name));
 function invalidate() { revision++; registry.clear(); fingerprint = ""; for (const c of calls.values()) c.abort(); }
 function snapshot(status: string, detail?: string) {
@@ -51,8 +57,9 @@ async function request(m: any) {
     if (!t || !context || paused || m.revision !== revision) throw new Error("Rediscover: stale tool.");
     const fresh = own(await context.getTools()).find(x => x.name === t.name);
     if (!fresh || revision !== expected || JSON.stringify(descriptor(fresh)) !== JSON.stringify(descriptor(t))) throw new Error("Rediscover: tool definition changed.");
+    const args = typeof fresh.inputSchema === "string" ? JSON.stringify(m.arguments) : m.arguments;
     controller.signal.throwIfAborted(); started = true;
-    const value = await context.executeTool(fresh, m.arguments, { signal: controller.signal });
+    const value = await context.executeTool(fresh, args, { signal: controller.signal });
     if (value === null) throw new Error("No completion result: document may have navigated. Inspect state before retrying.");
     if (typeof value !== "string" || new TextEncoder().encode(value).length > MAX_RESULT) throw new Error("Result exceeds 384 KiB or is invalid; narrow the operation.");
     emit({ type: "response", id: m.id, result: { value } });
