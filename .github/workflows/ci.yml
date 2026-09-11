@@ -41,4 +41,4 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '@themakers:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$HOME/.npmrc"
-          bun publish --access public
+          bun x npm@latest publish --registry=https://npm.pkg.github.com --access=public
