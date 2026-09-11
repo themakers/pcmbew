@@ -16,7 +16,7 @@ export function pcmbew(start: (mcp: McpServer) => void | Promise<void>): void {
     stop();
     if (port === undefined) return;
 
-    const mcp = new McpServer({ name: "pcmbew", version: "0.1.0" });
+    const mcp = new McpServer({ name: "pcmbew", version: "0.1.1" });
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
 

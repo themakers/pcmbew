@@ -19,15 +19,11 @@ export default function (pi: ExtensionAPI) {
 
   const connect = (signal?: AbortSignal): Promise<Client> => {
     if (opening) return opening;
-    const next = new Client({ name: "pcmbew-pi-example", version: "0.1.0" });
-    const env = getDefaultEnvironment();
-    for (const key of ["NODE_AUTH_TOKEN", "NPM_CONFIG_USERCONFIG"]) {
-      if (process.env[key]) env[key] = process.env[key]!;
-    }
+    const next = new Client({ name: "pcmbew-pi-example", version: "0.1.1" });
     const transport = new StdioClientTransport({
       command: process.env.PCMBEW_BUN ?? "bun",
-      args: ["x", "--bun", "@themakers/pcmbew@0.1.0", "--port", String(port), "--origin", origin],
-      env,
+      args: ["x", "--bun", "@themakers/pcmbew@0.1.1", "--port", String(port), "--origin", origin],
+      env: getDefaultEnvironment(),
       stderr: "inherit",
     });
     client = next;
@@ -76,7 +72,6 @@ export default function (pi: ExtensionAPI) {
       } else {
         result = await mcp.callTool({ name: params.tool!, arguments: params.arguments ?? {} }, undefined, options);
       }
-      // Preserve MCP isError/content/structuredContent as data, not instructions.
       return { content: [{ type: "text", text: JSON.stringify(result) }], details: {} };
     },
   });

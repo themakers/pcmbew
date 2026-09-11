@@ -1,6 +1,6 @@
 {
   "name": "@themakers/pcmbew",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An opaque stdio/WebSocket MCP bridge, with the server in your SPA.",
   "type": "module",
   "license": "MIT",
@@ -12,12 +12,13 @@
   "sideEffects": false,
   "engines": { "node": ">=20" },
   "packageManager": "bun@1.3.0",
-  "publishConfig": { "registry": "https://npm.pkg.github.com", "access": "public" },
+  "publishConfig": { "registry": "https://registry.npmjs.org", "access": "public" },
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "bun build src/cli.ts --target=node --format=cjs --packages=external --outfile=dist/cli.cjs && bun build src/client.ts --target=browser --packages=external --outfile=dist/client.js && bun x --bun tsc --emitDeclarationOnly",
+    "prepare": "bun run build",
     "check": "bun run docs:check && bun x --bun tsc --noEmit",
-    "docs:check": "bun scripts/check-docs.mjs",
-    "prepack": "bun run build"
+    "docs:check": "bun scripts/check-docs.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
