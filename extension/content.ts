@@ -1,4 +1,4 @@
-import { VERSION, MAX_RESULT } from "../src/shared";
+import { VERSION, MAX_RESULT, MAX_TOOLS, assertCatalogLimits } from "../src/shared";
 type NativeTool = { name: string; description: string; title?: string; inputSchema?: object | string; annotations?: object; window: Window; origin: string };
 type ModelContext = EventTarget & { getTools(): Promise<NativeTool[]>; executeTool(tool: NativeTool, args: unknown, options?: { signal: AbortSignal }): Promise<string | null> };
 // Runs in Chrome's isolated world. No eval, MAIN-world injection, cookie access,
@@ -22,7 +22,9 @@ function descriptor(t: NativeTool) {
 const own = (items: NativeTool[]) => items.filter(t => t.window === window && t.origin === location.origin).sort((a, b) => a.name.localeCompare(b.name));
 function invalidate() { revision++; registry.clear(); fingerprint = ""; for (const c of calls.values()) c.abort(); }
 function snapshot(status: string, detail?: string) {
-  emit({ type: "snapshot", revision, status, detail, tools: [...registry].map(([key, t]) => ({ key, ...descriptor(t) })) });
+  const tools = [...registry].map(([key, t]) => ({ key, ...descriptor(t) }));
+  assertCatalogLimits(tools); // Include generated keys in the actual wire catalogue budget.
+  emit({ type: "snapshot", revision, status, detail, tools });
 }
 async function scan() {
   if (stopped || paused) return;
@@ -33,9 +35,8 @@ async function scan() {
   if (context !== next) { context?.removeEventListener("toolchange", changed); context = next; context.addEventListener("toolchange", changed); invalidate(); }
   const list = own(await context.getTools());
   if (stopped || paused) return;
-  if (list.length > 128) throw new Error("Document exceeds 128 tools.");
+  if (list.length > MAX_TOOLS) throw new Error(`Document exceeds ${MAX_TOOLS} tools.`);
   const encoded = JSON.stringify(list.map(descriptor));
-  if (new TextEncoder().encode(encoded).length > 256 * 1024) throw new Error("Tool catalogue exceeds 256 KiB.");
   if (fingerprint !== encoded) { revision++; registry = new Map(list.map(t => [crypto.randomUUID(), t])); fingerprint = encoded; }
   else { const fresh = new Map(list.map(t => [t.name, t])); for (const [key, t] of registry) registry.set(key, fresh.get(t.name)!); }
   snapshot("ready");

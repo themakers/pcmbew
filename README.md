@@ -66,13 +66,13 @@ edit source/config files, unzip a release or paste JavaScript into a website.
 Use an installed Bun runtime, or Node 22+ with npx. Run in the local harness:
 
 ```bash
-bun x --bun @themakers/webmcp-bridge-ext@1.0.0 install
+bun x --bun @themakers/webmcp-bridge-ext@1.0.1 install
 ```
 
 Node alternative:
 
 ```bash
-npx --yes @themakers/webmcp-bridge-ext@1.0.0 install
+npx --yes @themakers/webmcp-bridge-ext@1.0.1 install
 ```
 
 For Chromium instead of Google Chrome, append `--browser chromium`. For a
@@ -99,7 +99,7 @@ If the npm release is not available yet but the signed GitHub release exists,
 use its npm archive with npx; this is a public download, not GitHub Packages:
 
 ```bash
-npx --yes https://github.com/themakers/webmcp-bridge-ext/releases/download/v1.0.0/themakers-webmcp-bridge-ext-1.0.0.tgz install
+npx --yes https://github.com/themakers/webmcp-bridge-ext/releases/download/v1.0.1/themakers-webmcp-bridge-ext-1.0.1.tgz install
 ```
 
 Do not use a development `--local-archive` to bypass a failed signature check.
@@ -110,7 +110,7 @@ A refused update or invalid signature is an error to investigate.
 Run the installed CLI's `config` command through the same runtime:
 
 ```bash
-bun x --bun @themakers/webmcp-bridge-ext@1.0.0 config
+bun x --bun @themakers/webmcp-bridge-ext@1.0.1 config
 ```
 
 It prints a subprocess descriptor with **absolute paths** to the installed

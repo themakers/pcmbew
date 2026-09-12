@@ -1,8 +1,14 @@
-export const VERSION = "1.0.0", WIRE = 1, PORT = 8777;
+export const VERSION = "1.0.1", WIRE = 1, PORT = 8777;
 export const HOST = "rs.themake.webmcp_bridge_ext";
 export const EXTENSION_ID = "mhifnicapojjbmfghbiojhhjplfomfbg";
 export const REPO = "themakers/webmcp-bridge-ext";
 export const MAX_FRAME = 768 * 1024, MAX_RESULT = 384 * 1024;
+// Leave 256 KiB for context/envelope metadata below the native frame limit.
+export const MAX_TOOLS = 2048, MAX_CATALOG_BYTES = 512 * 1024;
+export function assertCatalogLimits(tools: readonly unknown[]) {
+  if (tools.length > MAX_TOOLS) throw new Error(`Document exceeds ${MAX_TOOLS} tools.`);
+  if (new TextEncoder().encode(JSON.stringify(tools)).length > MAX_CATALOG_BYTES) throw new Error(`Tool catalogue exceeds ${MAX_CATALOG_BYTES / 1024} KiB.`);
+}
 export type Dict = Record<string, any>;
 export type Tool = { key: string; name: string; description: string; title?: string; inputSchema: Dict; annotations?: Dict };
 export type Page = { key: string; documentId: string; tabId: number; frameId: number; origin: string; url: string; title: string; active: boolean; enabled: boolean; revision: number; tools: Tool[] };

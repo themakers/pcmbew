@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WebMCP Bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Share selected native WebMCP tabs with your local agent. Private by default.",
   "minimum_chrome_version": "120",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4+0TAY0hGQeFR26zsFRe4dkO/Pcmqq0WcRVAbHJu1tK2wHiPgNLGKkDilGU9+BxbM10NYaU7GL/pJyWEruV4wnQWLwXBx3MY+Toi3H6RY0r0cWvcPdmA0KTvILByrTB6WGFxapcSxF8B6kOrJy8VKCAmtbWhaadgPW/0G9yKYRoNVi8G6X9aUFHmeaWhz+ZtY6fcdoZ5K4X9I+zz5OiXqThszVPkTNx0gXWbu/UtWPB4s6k5AFxpDdHi2PawcUKp8ice+MQ1dGcUzsQOCXQ/yDvKaNZwBCpozpqleuNZn0v28q3kMefhTbx41RJ2dfBjQNnSeAhpAKL8+GdKrGzBcwIDAQAB",

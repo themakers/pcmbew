@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import Ajv from "ajv";
 import Ajv2020 from "ajv/dist/2020.js";
-import { BridgeError, clean, safeURL, type Page, type Tool } from "./shared";
+import { BridgeError, clean, safeURL, assertCatalogLimits, type Page, type Tool } from "./shared";
 type Entry = { channel: string; page: Page; contextRef: string; refs: Map<string, Tool>; touched: number };
 const reject = (reason: string): never => { console.error("Rejected WebMCP catalogue:", reason); throw new Error(reason); };
 export class Catalog {
@@ -12,7 +12,8 @@ export class Catalog {
   private modern = new Ajv2020({ strict: false, validateFormats: false, ownProperties: true, addUsedSchema: false });
   upsert(channel: string, input: Page) {
     const p: Page = structuredClone(input);
-    if (!p || typeof p.key !== "string" || typeof p.documentId !== "string" || typeof p.title !== "string" || !Number.isInteger(p.tabId) || !Number.isInteger(p.frameId) || !Number.isInteger(p.revision) || typeof p.enabled !== "boolean" || !Array.isArray(p.tools) || p.tools.length > 128) reject("Invalid context field types: " + JSON.stringify(Object.fromEntries(["key", "documentId", "title", "tabId", "frameId", "revision", "enabled", "tools"].map(k => [k, typeof (p as any)?.[k]]))));
+    if (!p || typeof p.key !== "string" || typeof p.documentId !== "string" || typeof p.title !== "string" || !Number.isInteger(p.tabId) || !Number.isInteger(p.frameId) || !Number.isInteger(p.revision) || typeof p.enabled !== "boolean" || !Array.isArray(p.tools)) reject("Invalid context field types: " + JSON.stringify(Object.fromEntries(["key", "documentId", "title", "tabId", "frameId", "revision", "enabled", "tools"].map(k => [k, typeof (p as any)?.[k]]))));
+    try { assertCatalogLimits(p.tools); } catch (e) { reject((e as Error).message); }
     const u = new URL(p.url);
     if (!["http:", "https:"].includes(u.protocol) || u.origin !== p.origin) reject("Invalid origin");
     p.url = safeURL(p.url); p.title = clean(p.title);

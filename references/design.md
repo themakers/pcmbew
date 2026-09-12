@@ -103,8 +103,10 @@ The broker validates both its static tool schemas and the discovered website
 input schema, using AJV without fetching remote references. Unsupported schemas
 fail explicitly. It allows at most eight actions globally and one per context;
 excess calls are rejected, not queued. Discovery is bounded at 256 document
-contexts, 128 tools per document, 256 KiB native catalogue messages, and 1 MiB
-MCP result bodies.
+contexts, 2048 tools per document, 512 KiB UTF-8 tool catalogues (including
+bridge-generated keys), 768 KiB native frames, and 1 MiB MCP result bodies.
+Catalogue limits are shared by the content script, extension worker and broker;
+oversized snapshots explicitly revoke the document's previous catalogue.
 
 Discovery refreshes connected contexts on demand, with a short coalescing
 window. Content scripts also observe `toolchange` and refresh periodically.

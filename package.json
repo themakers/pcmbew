@@ -1,6 +1,6 @@
 {
   "name": "@themakers/webmcp-bridge-ext",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native WebMCP tabs to local MCP: a Chrome extension and native host.",
   "type": "module",
   "license": "MIT",

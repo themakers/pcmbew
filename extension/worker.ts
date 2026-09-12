@@ -1,4 +1,4 @@
-import { HOST, VERSION, WIRE, DEFAULT_POLICY, enabled, failure, BridgeError, safeURL, type Policy, type Page } from "../src/shared";
+import { HOST, VERSION, WIRE, DEFAULT_POLICY, enabled, failure, BridgeError, safeURL, assertCatalogLimits, type Policy, type Page } from "../src/shared";
 type Entry = { page: Page; port: chrome.runtime.Port; status: string; detail?: string };
 let policy: Policy = structuredClone(DEFAULT_POLICY), profile = "";
 let overrides: Record<string, { origin: string; enabled: boolean }> = {};
@@ -107,8 +107,17 @@ chrome.runtime.onConnect.addListener(port => {
   port.onMessage.addListener(m => { void Promise.all([boot, admission]).then(([, allowed]) => {
     if (!allowed) { port.disconnect(); remove(key); return; }
     if (!docs.has(key)) return;
-    if (m.type === "snapshot" && Array.isArray(m.tools) && m.tools.length <= 128 && Number.isInteger(m.revision)) {
-      page.tools = m.tools; page.revision = m.revision; d.status = m.status; d.detail = m.detail; snapshot(d); project();
+    if (m.type === "snapshot") {
+      try {
+        if (!Array.isArray(m.tools) || !Number.isInteger(m.revision)) throw new Error("Invalid catalogue snapshot.");
+        assertCatalogLimits(m.tools);
+        page.tools = m.tools; page.revision = m.revision; d.status = m.status; d.detail = m.detail;
+      } catch (error) {
+        // Revoke the old catalogue rather than silently keeping stale callable tools.
+        for (const [id, p] of [...pending, ...approvals]) if (p.key === key) cancel(id);
+        page.tools = []; page.revision++; d.status = "error"; d.detail = String(error);
+      }
+      snapshot(d); project();
     } else if (m.type === "response") {
       const p = pending.get(m.id); if (!p || p.key !== key) return;
       clearTimeout(p.timer); pending.delete(m.id);
